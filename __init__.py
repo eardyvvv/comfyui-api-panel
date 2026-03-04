@@ -1,3 +1,8 @@
+import torch
+import numpy as np
+from PIL import Image
+from transformers import pipeline
+
 class API_Input_Panel:
     @classmethod
     def INPUT_TYPES(s):
@@ -49,12 +54,54 @@ class API_BBox_Switch:
         return (bboxes_body,)
 
 
+_classifier = None
+
+class NSFW_Image_Checker:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "image": ("IMAGE",),
+                "threshold": ("FLOAT", {"default": 0.8, "min": 0.0, "max": 1.0, "step": 0.01}),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE",)
+    RETURN_NAMES = ("image",)
+    FUNCTION = "check_nsfw"
+    CATEGORY = "API"
+
+    def check_nsfw(self, image, threshold):
+        global _classifier
+        if _classifier is None:
+            _classifier = pipeline("image-classification", model="Falconsai/nsfw_image_detection")
+            
+        total_frames = image.shape[0]
+        if total_frames > 1:
+            step = (total_frames - 1) / 5
+            frames_to_check = [int(step * i) for i in range(5)] + [total_frames - 1]
+            frames_to_check = sorted(list(set(frames_to_check)))
+        else:
+            frames_to_check = [0]
+            
+        for frame_idx in frames_to_check:
+            i = 255. * image[frame_idx].cpu().numpy()
+            img = Image.fromarray(np.clip(i, 0, 255).astype(np.uint8))
+            results = _classifier(img)
+            for res in results:
+                if res['label'] == 'nsfw' and res['score'] > threshold:
+                    raise ValueError(f"NSFW content detected in frame {frame_idx} with confidence {res['score']:.2f}")
+                    
+        return (image,)
+
 NODE_CLASS_MAPPINGS = {
     "API_Input_Panel": API_Input_Panel,
-    "API_BBox_Switch": API_BBox_Switch
+    "API_BBox_Switch": API_BBox_Switch,
+    "NSFW_Image_Checker": NSFW_Image_Checker
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "API_Input_Panel": "Input Panel",
-    "API_BBox_Switch": "BBoxes Switch"
+    "API_BBox_Switch": "BBoxes Switch",
+    "NSFW_Image_Checker": "NSFW Image Checker"
 }
