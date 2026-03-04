@@ -3,6 +3,11 @@ import numpy as np
 from PIL import Image
 from transformers import pipeline
 
+import torch
+import numpy as np
+from PIL import Image
+from transformers import pipeline
+
 class API_Input_Panel:
     @classmethod
     def INPUT_TYPES(s):
@@ -98,10 +103,14 @@ NODE_CLASS_MAPPINGS = {
     "API_Input_Panel": API_Input_Panel,
     "API_BBox_Switch": API_BBox_Switch,
     "NSFW_Image_Checker": NSFW_Image_Checker
+    "API_BBox_Switch": API_BBox_Switch,
+    "NSFW_Image_Checker": NSFW_Image_Checker
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "API_Input_Panel": "Input Panel",
+    "API_BBox_Switch": "BBoxes Switch",
+    "NSFW_Image_Checker": "NSFW Image Checker"
     "API_BBox_Switch": "BBoxes Switch",
     "NSFW_Image_Checker": "NSFW Image Checker"
 }
