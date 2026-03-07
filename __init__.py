@@ -64,6 +64,7 @@ class NSFW_Image_Checker:
                 "image": ("IMAGE",),
                 "threshold": ("FLOAT", {"default": 0.8, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "sexy_threshold": ("FLOAT", {"default": 0.98, "min": 0.0, "max": 1.0, "step": 0.01}),
+                "minor_threshold": ("FLOAT", {"default": 0.85, "min": 0.0, "max": 1.0, "step": 0.01}),
             }
         }
 
@@ -71,12 +72,12 @@ class NSFW_Image_Checker:
     RETURN_NAMES = ("image", "check_result")
     FUNCTION = "check_nsfw"
     CATEGORY = "API"
+    OUTPUT_NODE = True
 
-    def check_nsfw(self, image, threshold, sexy_threshold):
+    def check_nsfw(self, image, threshold, sexy_threshold, minor_threshold):
         global _classifier
         if _classifier is None:
-            processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224")
-            _classifier = pipeline("image-classification", model="giacomoarienti/nsfw-classifier", image_processor=processor)
+            _classifier = pipeline("zero-shot-image-classification", model="openai/clip-vit-base-patch32")
             
         total_frames = image.shape[0]
         if total_frames > 1:
@@ -86,31 +87,52 @@ class NSFW_Image_Checker:
         else:
             frames_to_check = [0]
             
+        images_to_process = []
+        for frame_idx in frames_to_check:
+            i = 255. * image[frame_idx].cpu().numpy()
+            img = Image.fromarray(np.clip(i, 0, 255).astype(np.uint8))
+            images_to_process.append(img)
+            
+        labels = [
+            "normal everyday photo",
+            "woman in revealing clothing or deep cleavage without bare nipples",
+            "explicit nude pornography exposing bare nipples or genitalia",
+            "explicit pornographic drawing or hentai",
+            "child, baby, or young teenager"
+        ]
+        results_batch = _classifier(images_to_process, candidate_labels=labels)
+        
+        if not isinstance(results_batch[0], list):
+            results_batch = [results_batch]
+            
         log_messages = []
         bad_frames = 0
         limit = 2 if total_frames > 1 else 1
         
-        for frame_idx in frames_to_check:
-            i = 255. * image[frame_idx].cpu().numpy()
-            img = Image.fromarray(np.clip(i, 0, 255).astype(np.uint8))
-            results = _classifier(img)
-            
+        for frame_idx, results in zip(frames_to_check, results_batch):
             s = {r['label']: r['score'] for r in results}
-            frame_log = f"F{frame_idx}: neutral:{s.get('neutral', 0):.2f}, sexy:{s.get('sexy', 0):.2f}, porn:{s.get('porn', 0):.2f}, hentai:{s.get('hentai', 0):.2f}"
+            safe_val = s.get("normal everyday photo", 0)
+            sexy_val = s.get("woman in revealing clothing or deep cleavage without bare nipples", 0)
+            porn_val = s.get("explicit nude pornography exposing bare nipples or genitalia", 0)
+            hentai_val = s.get("explicit pornographic drawing or hentai", 0)
+            minor_val = s.get("child, baby, or young teenager", 0)
+            
+            frame_log = f"F{frame_idx}: safe:{safe_val:.2f}, sexy:{sexy_val:.2f}, porn:{porn_val:.2f}, hentai:{hentai_val:.2f}, minor:{minor_val:.2f}"
             log_messages.append(frame_log)
             
             is_bad = False
-            for res in results:
-                if res['label'] in ['porn', 'hentai'] and res['score'] > threshold:
-                    is_bad = True
-                if res['label'] == 'sexy' and res['score'] > sexy_threshold:
-                    is_bad = True
-                    
+            if porn_val > threshold or hentai_val > threshold:
+                is_bad = True
+            if minor_val > minor_threshold:
+                is_bad = True
+            if sexy_val > sexy_threshold:
+                is_bad = True
+                
             if is_bad:
                 bad_frames += 1
                 if bad_frames >= limit:
                     raise ValueError(f"Blocked: NSFW limit reached ({bad_frames} frames). Last trigger: {frame_log}")
-                    
+
         final_log = "\n".join(log_messages)
         return (image, final_log)
 
