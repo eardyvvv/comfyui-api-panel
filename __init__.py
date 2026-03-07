@@ -95,7 +95,8 @@ class NSFW_Image_Checker:
             
         labels = [
             "normal everyday photo",
-            "woman in revealing clothing or deep cleavage without bare nipples",
+            "woman in standard swimsuit, lingerie, or moderately revealing clothing",
+            "highly provocative, extremely revealing micro bikini, or hyper-sexualized poses without bare nipples",
             "explicit nude pornography exposing bare nipples or genitalia",
             "explicit pornographic drawing or hentai",
             "child, baby, or young teenager"
@@ -112,12 +113,13 @@ class NSFW_Image_Checker:
         for frame_idx, results in zip(frames_to_check, results_batch):
             s = {r['label']: r['score'] for r in results}
             safe_val = s.get("normal everyday photo", 0)
-            sexy_val = s.get("woman in revealing clothing or deep cleavage without bare nipples", 0)
+            mild_sexy_val = s.get("woman in standard swimsuit, lingerie, or moderately revealing clothing", 0)
+            sexy_val = s.get("highly provocative, extremely revealing micro bikini, or hyper-sexualized poses without bare nipples", 0)
             porn_val = s.get("explicit nude pornography exposing bare nipples or genitalia", 0)
             hentai_val = s.get("explicit pornographic drawing or hentai", 0)
             minor_val = s.get("child, baby, or young teenager", 0)
             
-            frame_log = f"F{frame_idx}: safe:{safe_val:.2f}, sexy:{sexy_val:.2f}, porn:{porn_val:.2f}, hentai:{hentai_val:.2f}, minor:{minor_val:.2f}"
+            frame_log = f"F{frame_idx}: safe:{safe_val:.2f}, mild_sexy:{mild_sexy_val:.2f}, sexy:{sexy_val:.2f}, porn:{porn_val:.2f}, hentai:{hentai_val:.2f}, minor:{minor_val:.2f}"
             log_messages.append(frame_log)
             
             is_bad = False
