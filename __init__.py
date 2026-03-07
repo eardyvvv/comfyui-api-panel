@@ -80,27 +80,36 @@ class NSFW_Image_Checker:
             
         total_frames = image.shape[0]
         if total_frames > 1:
-            step = (total_frames - 1) / 5
-            frames_to_check = [int(step * i) for i in range(5)] + [total_frames - 1]
+            step = (total_frames - 1) / 9
+            frames_to_check = [int(step * i) for i in range(9)] + [total_frames - 1]
             frames_to_check = sorted(list(set(frames_to_check)))
         else:
             frames_to_check = [0]
             
         log_messages = []
+        bad_frames = 0
+        limit = 2 if total_frames > 1 else 1
         
         for frame_idx in frames_to_check:
             i = 255. * image[frame_idx].cpu().numpy()
             img = Image.fromarray(np.clip(i, 0, 255).astype(np.uint8))
             results = _classifier(img)
             
-            frame_log = f"Frame {frame_idx}: " + ", ".join([f"{r['label']}:{r['score']:.2f}" for r in results[:3]])
+            s = {r['label']: r['score'] for r in results}
+            frame_log = f"F{frame_idx}: neutral:{s.get('neutral', 0):.2f}, sexy:{s.get('sexy', 0):.2f}, porn:{s.get('porn', 0):.2f}, hentai:{s.get('hentai', 0):.2f}"
             log_messages.append(frame_log)
             
+            is_bad = False
             for res in results:
                 if res['label'] in ['porn', 'hentai'] and res['score'] > threshold:
-                    raise ValueError(f"Blocked (Porn/Hentai) frame {frame_idx} [{res['score']:.2f}]. Log: {frame_log}")
+                    is_bad = True
                 if res['label'] == 'sexy' and res['score'] > sexy_threshold:
-                    raise ValueError(f"Blocked (Sexy) frame {frame_idx} [{res['score']:.2f}]. Log: {frame_log}")
+                    is_bad = True
+                    
+            if is_bad:
+                bad_frames += 1
+                if bad_frames >= limit:
+                    raise ValueError(f"Blocked: NSFW limit reached ({bad_frames} frames). Last trigger: {frame_log}")
                     
         final_log = "\n".join(log_messages)
         return (image, final_log)
