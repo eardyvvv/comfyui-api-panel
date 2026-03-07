@@ -63,18 +63,19 @@ class NSFW_Image_Checker:
             "required": {
                 "image": ("IMAGE",),
                 "threshold": ("FLOAT", {"default": 0.8, "min": 0.0, "max": 1.0, "step": 0.01}),
+                "sexy_threshold": ("FLOAT", {"default": 0.98, "min": 0.0, "max": 1.0, "step": 0.01}),
             }
         }
 
-    RETURN_TYPES = ("IMAGE",)
-    RETURN_NAMES = ("image",)
+    RETURN_TYPES = ("IMAGE", "STRING")
+    RETURN_NAMES = ("image", "check_result")
     FUNCTION = "check_nsfw"
     CATEGORY = "API"
 
-    def check_nsfw(self, image, threshold):
+    def check_nsfw(self, image, threshold, sexy_threshold):
         global _classifier
         if _classifier is None:
-            _classifier = pipeline("image-classification", model="Falconsai/nsfw_image_detection")
+            _classifier = pipeline("image-classification", model="giacomoarienti/nsfw-classifier")
             
         total_frames = image.shape[0]
         if total_frames > 1:
@@ -84,15 +85,24 @@ class NSFW_Image_Checker:
         else:
             frames_to_check = [0]
             
+        log_messages = []
+        
         for frame_idx in frames_to_check:
             i = 255. * image[frame_idx].cpu().numpy()
             img = Image.fromarray(np.clip(i, 0, 255).astype(np.uint8))
             results = _classifier(img)
+            
+            frame_log = f"Frame {frame_idx}: " + ", ".join([f"{r['label']}:{r['score']:.2f}" for r in results[:3]])
+            log_messages.append(frame_log)
+            
             for res in results:
-                if res['label'] == 'nsfw' and res['score'] > threshold:
-                    raise ValueError(f"NSFW content detected in frame {frame_idx} with confidence {res['score']:.2f}")
+                if res['label'] in ['porn', 'hentai'] and res['score'] > threshold:
+                    raise ValueError(f"Blocked (Porn/Hentai) frame {frame_idx} [{res['score']:.2f}]. Log: {frame_log}")
+                if res['label'] == 'sexy' and res['score'] > sexy_threshold:
+                    raise ValueError(f"Blocked (Sexy) frame {frame_idx} [{res['score']:.2f}]. Log: {frame_log}")
                     
-        return (image,)
+        final_log = "\n".join(log_messages)
+        return (image, final_log)
 
 NODE_CLASS_MAPPINGS = {
     "API_Input_Panel": API_Input_Panel,
