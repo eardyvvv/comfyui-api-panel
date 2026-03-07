@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 from PIL import Image
-from transformers import pipeline
+from transformers import pipeline, AutoImageProcessor
 
 class API_Input_Panel:
     @classmethod
@@ -75,7 +75,8 @@ class NSFW_Image_Checker:
     def check_nsfw(self, image, threshold, sexy_threshold):
         global _classifier
         if _classifier is None:
-            _classifier = pipeline("image-classification", model="giacomoarienti/nsfw-classifier")
+            processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224")
+            _classifier = pipeline("image-classification", model="giacomoarienti/nsfw-classifier", image_processor=processor)
             
         total_frames = image.shape[0]
         if total_frames > 1:
