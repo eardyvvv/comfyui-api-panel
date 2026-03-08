@@ -94,11 +94,11 @@ class NSFW_Image_Checker:
             images_to_process.append(img)
             
         labels = [
-            "a photo of an everyday scene or a clothed person",
-            "a photo of a person in revealing clothing",
-            "a photo of a person in underwear or swimwear",
-            "a photo of a completely naked person",
-            "a photo of a child"
+            "a photo of a clothed person, everyday scene, or portrait",
+            "a photo of a person in revealing clothing with deep cleavage",
+            "a photo of a person in a bikini, swimwear, lingerie, or a towel",
+            "explicit nude pornography, exposed genitals, or bare breasts",
+            "a photo of a child or baby"
         ]
         results_batch = _classifier(images_to_process, candidate_labels=labels)
         
