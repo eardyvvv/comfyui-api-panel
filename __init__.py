@@ -111,11 +111,11 @@ class NSFW_Image_Checker:
         
         for frame_idx, results in zip(frames_to_check, results_batch):
             s = {r['label']: r['score'] for r in results}
-            safe_val = s.get("safe photo of attractive woman, dancing, casual clothes, fully covered body without naked parts", 0)
-            mild_sexy_val = s.get("attractive woman with very deep cleavage, short skirt, or swimwear, nipples and genitals are strictly covered by clothing", 0)
-            sexy_val = s.get("highly sexualized suggestive pose, extremely revealing clothing, close to porn but nipples are covered", 0)
-            porn_val = s.get("explicit hardcore pornography, naked person, exposed bare nipples, exposed vagina, exposed anus", 0)
-            minor_val = s.get("child, baby, or young teenager", 0)
+            safe_val = s.get(labels[0], 0)
+            mild_sexy_val = s.get(labels[1], 0)
+            sexy_val = s.get(labels[2], 0)
+            porn_val = s.get(labels[3], 0)
+            minor_val = s.get(labels[4], 0)
             
             frame_log = f"F{frame_idx}: safe:{safe_val:.2f}, mild_sexy:{mild_sexy_val:.2f}, sexy:{sexy_val:.2f}, porn:{porn_val:.2f}, minor:{minor_val:.2f}"
             log_messages.append(frame_log)
