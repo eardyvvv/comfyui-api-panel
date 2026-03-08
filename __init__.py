@@ -94,10 +94,10 @@ class NSFW_Image_Checker:
             images_to_process.append(img)
             
         labels = [
-            "safe photo of attractive woman, dancing, casual clothes, fully covered body without naked parts",
-            "attractive woman with very deep cleavage, short skirt, or swimwear, nipples and genitals are strictly covered by clothing",
-            "highly sexualized suggestive pose, extremely revealing clothing, close to porn but nipples are covered",
-            "explicit hardcore pornography, naked person, exposed bare nipples, exposed vagina, exposed anus",
+            "safe everyday photo, face portrait, bare shoulders, casual clothes, completely safe for work, no nudity",
+            "attractive woman in swimwear, towel, lingerie, deep cleavage, showing skin but intimate parts are strictly covered",
+            "highly provocative sexualized pose, extremely revealing clothing, almost naked but nipples are covered",
+            "explicit hardcore nude pornography, fully naked person exposing bare nipples, exposed vagina, or exposed anus",
             "child, baby, or young teenager"
         ]
         results_batch = _classifier(images_to_process, candidate_labels=labels)
