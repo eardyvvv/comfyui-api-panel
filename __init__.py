@@ -107,7 +107,7 @@ class NSFW_Image_Checker:
             
         log_messages = []
         bad_frames = 0
-        limit = 2 if total_frames > 1 else 1
+        limit = 5 if total_frames > 1 else 1
         
         for frame_idx, results in zip(frames_to_check, results_batch):
             s = {r['label']: r['score'] for r in results}
