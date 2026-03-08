@@ -94,11 +94,11 @@ class NSFW_Image_Checker:
             images_to_process.append(img)
             
         labels = [
-            "safe everyday selfie, face portrait, bare shoulders, neck, collarbones, lots of visible skin, completely safe for work",
-            "attractive woman in towel or swimwear, deep cleavage, showing a lot of bare skin but intimate parts are covered",
-            "highly provocative sexualized pose, extremely revealing clothing, almost naked but nipples are covered",
-            "explicit hardcore pornography, visible genitals, explicit sexual acts",
-            "child, baby, or young teenager"
+            "a photo of an everyday scene or a clothed person",
+            "a photo of a person in revealing clothing",
+            "a photo of a person in underwear or swimwear",
+            "a photo of a completely naked person",
+            "a photo of a child"
         ]
         results_batch = _classifier(images_to_process, candidate_labels=labels)
         
