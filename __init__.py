@@ -64,7 +64,6 @@ class NSFW_Image_Checker:
                 "image": ("IMAGE",),
                 "threshold": ("FLOAT", {"default": 0.8, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "sexy_threshold": ("FLOAT", {"default": 0.98, "min": 0.0, "max": 1.0, "step": 0.01}),
-                "minor_threshold": ("FLOAT", {"default": 0.85, "min": 0.0, "max": 1.0, "step": 0.01}),
             }
         }
 
@@ -74,7 +73,7 @@ class NSFW_Image_Checker:
     CATEGORY = "API"
     OUTPUT_NODE = True
 
-    def check_nsfw(self, image, threshold, sexy_threshold, minor_threshold):
+    def check_nsfw(self, image, threshold, sexy_threshold):
         global _classifier
         if _classifier is None:
             _classifier = pipeline("zero-shot-image-classification", model="openai/clip-vit-large-patch14", device=0)
@@ -117,15 +116,12 @@ class NSFW_Image_Checker:
             mild_sexy_val = s.get(labels[4], 0)
             sexy_val = s.get(labels[5], 0)
             porn_val = s.get(labels[6], 0)
-            minor_val = 0.0
             
-            frame_log = f"F{frame_idx}: safe:{safe_val:.2f}, mild_sexy:{mild_sexy_val:.2f}, sexy:{sexy_val:.2f}, porn:{porn_val:.2f}, minor:{minor_val:.2f}"
+            frame_log = f"F{frame_idx}: safe:{safe_val:.2f}, mild_sexy:{mild_sexy_val:.2f}, sexy:{sexy_val:.2f}, porn:{porn_val:.2f}"
             log_messages.append(frame_log)
             
             is_bad = False
             if porn_val > threshold:
-                is_bad = True
-            if minor_val > minor_threshold:
                 is_bad = True
             if sexy_val > sexy_threshold:
                 is_bad = True
