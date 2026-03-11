@@ -94,14 +94,14 @@ class NSFW_Image_Checker:
             images_to_process.append(img)
             
         labels = [
-            "a photo of a clothed person, everyday scene, or portrait",
-            "a photo of a person in revealing clothing with deep cleavage",
-            "a photo of a person in a bikini, swimwear, lingerie, or a towel",
-            "explicit nude pornography, exposed genitals, or bare breasts",
-            "a photo of a child or baby",
-            "a photo of sports, fitness, yoga, or gymnastics",
-            "a close-up abstract photo of skin, face, hands, or limbs",
-            "a photo of classical art, painting, or statue"
+            "portrait, everyday scene, clothed person",
+            "revealing clothing, deep cleavage",
+            "bikini, swimwear, lingerie",
+            "explicit nude pornography, exposed genitals",
+            "child, baby",
+            "sports, fitness, yoga",
+            "close-up photo of skin",
+            "classical art, painting, statue"
         ]
         results_batch = _classifier(images_to_process, candidate_labels=labels, multi_label=True)
         
@@ -120,7 +120,7 @@ class NSFW_Image_Checker:
             porn_val = s.get(labels[3], 0)
             minor_val = s.get(labels[4], 0)
             
-            frame_log = f"F{frame_idx}: safe:{safe_val:.2f}, mild_sexy:{mild_sexy_val:.2f}, sexy:{sexy_val:.2f}, porn:{porn_val:.2f}, minor:{minor_val:.2f}"
+            frame_log = f"F{frame_idx}: safe:{safe_val:.4f}, mild_sexy:{mild_sexy_val:.4f}, sexy:{sexy_val:.4f}, porn:{porn_val:.4f}, minor:{minor_val:.4f}"
             log_messages.append(frame_log)
             
             is_bad = False
