@@ -97,10 +97,10 @@ class NSFW_Image_Checker:
             "a safe, family-friendly photo of an everyday scene, object, animal, or clothed person",
             "a close-up abstract photo of skin, hands, limbs, or classical art",
             "a photo of sports, fitness, or gymnastics",
-            "a photo of a shirtless man, male bare torso",
+            "a photo of a handsome shirtless man, muscular male bare chest, male torso, abs",
             "a photo of a person in revealing clothing with deep cleavage",
             "a photo of a person in a bikini, swimwear, lingerie, or a towel",
-            "explicit nude pornography, exposed genitals, exposed female bare breasts, sexual act"
+            "explicit pornography, exposed genitals, sexual act, completely naked woman, uncovered female breasts"
         ]
         results_batch = _classifier(images_to_process, candidate_labels=labels)
         
