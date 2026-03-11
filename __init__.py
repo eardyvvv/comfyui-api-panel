@@ -64,6 +64,7 @@ class NSFW_Image_Checker:
                 "image": ("IMAGE",),
                 "threshold": ("FLOAT", {"default": 0.8, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "sexy_threshold": ("FLOAT", {"default": 0.98, "min": 0.0, "max": 1.0, "step": 0.01}),
+                "source_name": ("STRING", {"default": "Media_Input"}),
             }
         }
 
@@ -73,7 +74,7 @@ class NSFW_Image_Checker:
     CATEGORY = "API"
     OUTPUT_NODE = True
 
-    def check_nsfw(self, image, threshold, sexy_threshold):
+    def check_nsfw(self, image, threshold, sexy_threshold, source_name):
         global _classifier
         if _classifier is None:
             _classifier = pipeline("zero-shot-image-classification", model="openai/clip-vit-large-patch14", device=0)
@@ -129,7 +130,7 @@ class NSFW_Image_Checker:
             if is_bad:
                 bad_frames += 1
                 if bad_frames >= limit:
-                    raise ValueError(f"Blocked: NSFW limit reached ({bad_frames} frames). Last trigger: {frame_log}")
+                    raise ValueError(f"Blocked at [{source_name}]: 18+ limit reached ({bad_frames} frames). Last trigger: {frame_log}")
 
         final_log = "\n".join(log_messages)
         return (image, final_log)
