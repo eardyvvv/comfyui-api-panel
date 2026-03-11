@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 from PIL import Image
-from transformers import pipeline, AutoImageProcessor
+from transformers import AutoProcessor, AutoModelForZeroShotImageClassification
 
 class API_Input_Panel:
     @classmethod
@@ -54,7 +54,8 @@ class API_BBox_Switch:
         return (bboxes_body,)
 
 
-_classifier = None
+_processor = None
+_model = None
 
 class NSFW_Image_Checker:
     @classmethod
@@ -75,10 +76,12 @@ class NSFW_Image_Checker:
     OUTPUT_NODE = True
 
     def check_nsfw(self, image, threshold, sexy_threshold, minor_threshold):
-        global _classifier
-        if _classifier is None:
-            _classifier = pipeline("zero-shot-image-classification", model="/workspace/ComfyUI/models/siglip")
-            
+        global _processor, _model
+        
+        if _model is None:
+            _processor = AutoProcessor.from_pretrained("/workspace/ComfyUI/models/siglip")
+            _model = AutoModelForZeroShotImageClassification.from_pretrained("/workspace/ComfyUI/models/siglip").to("cuda")
+
         total_frames = image.shape[0]
         if total_frames > 1:
             step = (total_frames - 1) / 9
@@ -99,21 +102,24 @@ class NSFW_Image_Checker:
             "explicit nude pornography, exposed genitals, or sexual act",
             "a close-up abstract photo of skin, classical art, painting, or statue"
         ]
-        results_batch = _classifier(images_to_process, candidate_labels=labels)
         
-        if not isinstance(results_batch[0], list):
-            results_batch = [results_batch]
-            
         log_messages = []
         bad_frames = 0
         limit = 5 if total_frames > 1 else 1
+
+        inputs = _processor(text=labels, images=images_to_process, return_tensors="pt", padding="max_length").to("cuda")
         
-        for frame_idx, results in zip(frames_to_check, results_batch):
-            s = {r['label']: r['score'] for r in results}
-            safe_val = s.get(labels[0], 0)
-            sexy_val = s.get(labels[1], 0)
-            porn_val = s.get(labels[2], 0)
-            abstract_val = s.get(labels[3], 0)
+        with torch.no_grad():
+            outputs = _model(**inputs)
+            
+        logits_per_image = outputs.logits_per_image
+        probs = torch.nn.functional.softmax(logits_per_image, dim=1).cpu().numpy()
+
+        for idx, frame_idx in enumerate(frames_to_check):
+            safe_val = probs[idx][0]
+            sexy_val = probs[idx][1]
+            porn_val = probs[idx][2]
+            abstract_val = probs[idx][3]
             
             frame_log = f"F{frame_idx}: safe:{safe_val:.2f}, sexy:{sexy_val:.2f}, explicit_18+:{porn_val:.2f}, abstract:{abstract_val:.2f}"
             log_messages.append(frame_log)
