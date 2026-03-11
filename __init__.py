@@ -77,7 +77,7 @@ class NSFW_Image_Checker:
     def check_nsfw(self, image, threshold, sexy_threshold, minor_threshold):
         global _classifier
         if _classifier is None:
-            _classifier = pipeline("zero-shot-image-classification", model="openai/clip-vit-base-patch32")
+            _classifier = pipeline("zero-shot-image-classification", model="/workspace/ComfyUI/models/siglip")
             
         total_frames = image.shape[0]
         if total_frames > 1:
@@ -98,9 +98,12 @@ class NSFW_Image_Checker:
             "a photo of a person in revealing clothing with deep cleavage",
             "a photo of a person in a bikini, swimwear, lingerie, or a towel",
             "explicit nude pornography, exposed genitals, or bare breasts",
-            "a photo of a child or baby"
+            "a photo of a child or baby",
+            "a photo of sports, fitness, yoga, or gymnastics",
+            "a close-up abstract photo of skin, face, hands, or limbs",
+            "a photo of classical art, painting, or statue"
         ]
-        results_batch = _classifier(images_to_process, candidate_labels=labels)
+        results_batch = _classifier(images_to_process, candidate_labels=labels, multi_label=True)
         
         if not isinstance(results_batch[0], list):
             results_batch = [results_batch]
