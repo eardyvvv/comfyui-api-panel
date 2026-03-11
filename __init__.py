@@ -94,11 +94,13 @@ class NSFW_Image_Checker:
             images_to_process.append(img)
             
         labels = [
-            "a photo of a clothed person, everyday scene, or portrait",
+            "a safe, family-friendly photo of an everyday scene, object, animal, or clothed person",
+            "a close-up abstract photo of skin, hands, limbs, or classical art",
+            "a photo of sports, fitness, or gymnastics",
+            "a photo of a shirtless man, male bare torso",
             "a photo of a person in revealing clothing with deep cleavage",
             "a photo of a person in a bikini, swimwear, lingerie, or a towel",
-            "explicit nude pornography, exposed genitals, or bare breasts",
-            "a photo of a child or baby"
+            "explicit nude pornography, exposed genitals, exposed female bare breasts, sexual act"
         ]
         results_batch = _classifier(images_to_process, candidate_labels=labels)
         
@@ -111,11 +113,11 @@ class NSFW_Image_Checker:
         
         for frame_idx, results in zip(frames_to_check, results_batch):
             s = {r['label']: r['score'] for r in results}
-            safe_val = s.get(labels[0], 0)
-            mild_sexy_val = s.get(labels[1], 0)
-            sexy_val = s.get(labels[2], 0)
-            porn_val = s.get(labels[3], 0)
-            minor_val = s.get(labels[4], 0)
+            safe_val = s.get(labels[0], 0) + s.get(labels[1], 0) + s.get(labels[2], 0) + s.get(labels[3], 0)
+            mild_sexy_val = s.get(labels[4], 0)
+            sexy_val = s.get(labels[5], 0)
+            porn_val = s.get(labels[6], 0)
+            minor_val = 0.0
             
             frame_log = f"F{frame_idx}: safe:{safe_val:.2f}, mild_sexy:{mild_sexy_val:.2f}, sexy:{sexy_val:.2f}, porn:{porn_val:.2f}, minor:{minor_val:.2f}"
             log_messages.append(frame_log)
