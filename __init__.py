@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 from PIL import Image
-from transformers import pipeline
+from transformers import pipeline, AutoImageProcessor
 
 class API_Input_Panel:
     @classmethod
@@ -76,10 +76,9 @@ class NSFW_Image_Checker:
 
     def check_nsfw(self, image, threshold, sexy_threshold, minor_threshold):
         global _classifier
-        
         if _classifier is None:
             _classifier = pipeline("zero-shot-image-classification", model="openai/clip-vit-large-patch14", device=0)
-
+            
         total_frames = image.shape[0]
         if total_frames > 1:
             step = (total_frames - 1) / 9
@@ -95,12 +94,12 @@ class NSFW_Image_Checker:
             images_to_process.append(img)
             
         labels = [
-            "a safe, family-friendly photo of an everyday scene, object, animal, or clothed person",
-            "a photo of a person in sexy revealing clothing, lingerie, swimwear, or bikini",
-            "explicit nude pornography, exposed genitals, or sexual act",
-            "a close-up abstract photo of skin, classical art, painting, or statue"
+            "a photo of a clothed person, everyday scene, or portrait",
+            "a photo of a person in revealing clothing with deep cleavage",
+            "a photo of a person in a bikini, swimwear, lingerie, or a towel",
+            "explicit nude pornography, exposed genitals, or bare breasts",
+            "a photo of a child or baby"
         ]
-        
         results_batch = _classifier(images_to_process, candidate_labels=labels)
         
         if not isinstance(results_batch[0], list):
@@ -113,21 +112,26 @@ class NSFW_Image_Checker:
         for frame_idx, results in zip(frames_to_check, results_batch):
             s = {r['label']: r['score'] for r in results}
             safe_val = s.get(labels[0], 0)
-            sexy_val = s.get(labels[1], 0)
-            porn_val = s.get(labels[2], 0)
-            abstract_val = s.get(labels[3], 0)
+            mild_sexy_val = s.get(labels[1], 0)
+            sexy_val = s.get(labels[2], 0)
+            porn_val = s.get(labels[3], 0)
+            minor_val = s.get(labels[4], 0)
             
-            frame_log = f"F{frame_idx}: safe:{safe_val:.2f}, sexy:{sexy_val:.2f}, explicit_18+:{porn_val:.2f}, abstract:{abstract_val:.2f}"
+            frame_log = f"F{frame_idx}: safe:{safe_val:.2f}, mild_sexy:{mild_sexy_val:.2f}, sexy:{sexy_val:.2f}, porn:{porn_val:.2f}, minor:{minor_val:.2f}"
             log_messages.append(frame_log)
             
             is_bad = False
             if porn_val > threshold:
                 is_bad = True
+            if minor_val > minor_threshold:
+                is_bad = True
+            if sexy_val > sexy_threshold:
+                is_bad = True
                 
             if is_bad:
                 bad_frames += 1
                 if bad_frames >= limit:
-                    raise ValueError(f"Blocked: 18+ limit reached ({bad_frames} frames). Last trigger: {frame_log}")
+                    raise ValueError(f"Blocked: NSFW limit reached ({bad_frames} frames). Last trigger: {frame_log}")
 
         final_log = "\n".join(log_messages)
         return (image, final_log)
