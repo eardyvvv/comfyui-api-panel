@@ -77,7 +77,7 @@ class NSFW_Image_Checker:
     def check_nsfw(self, image, threshold, sexy_threshold, source_name):
         global _classifier
         if _classifier is None:
-            _classifier = pipeline("zero-shot-image-classification", model="openai/clip-vit-large-patch14", device=0)
+            _classifier = pipeline("image-classification", model="Freepik/nsfw_image_detector", device=0)
             
         total_frames = image.shape[0]
         if total_frames > 1:
@@ -93,16 +93,7 @@ class NSFW_Image_Checker:
             img = Image.fromarray(np.clip(i, 0, 255).astype(np.uint8))
             images_to_process.append(img)
             
-        labels = [
-            "a safe, family-friendly photo of an everyday scene, object, animal, or clothed person",
-            "a close-up abstract photo of skin, hands, limbs, or classical art",
-            "a photo of sports, fitness, or gymnastics",
-            "a photo of a handsome shirtless man, muscular male bare chest, male torso, abs",
-            "a photo of a person in revealing clothing with deep cleavage",
-            "a photo of a person in a bikini, swimwear, lingerie, or a towel",
-            "explicit pornography, exposed genitals, sexual act, completely naked woman, uncovered female breasts"
-        ]
-        results_batch = _classifier(images_to_process, candidate_labels=labels)
+        results_batch = _classifier(images_to_process)
         
         if not isinstance(results_batch[0], list):
             results_batch = [results_batch]
@@ -112,11 +103,12 @@ class NSFW_Image_Checker:
         limit = 5 if total_frames > 1 else 1
         
         for frame_idx, results in zip(frames_to_check, results_batch):
-            s = {r['label']: r['score'] for r in results}
-            safe_val = s.get(labels[0], 0) + s.get(labels[1], 0) + s.get(labels[2], 0) + s.get(labels[3], 0)
-            mild_sexy_val = s.get(labels[4], 0)
-            sexy_val = s.get(labels[5], 0)
-            porn_val = s.get(labels[6], 0)
+            s = {str(r['label']).lower(): r['score'] for r in results}
+            
+            safe_val = s.get('neutral', s.get('safe', s.get('sfw', s.get('normal', 0))))
+            mild_sexy_val = s.get('low', s.get('drawings', 0))
+            sexy_val = s.get('medium', s.get('sexy', s.get('questionable', 0)))
+            porn_val = s.get('high', s.get('porn', s.get('nsfw', s.get('unsafe', s.get('hentai', 0)))))
             
             frame_log = f"F{frame_idx}: safe:{safe_val:.2f}, mild_sexy:{mild_sexy_val:.2f}, sexy:{sexy_val:.2f}, porn:{porn_val:.2f}"
             log_messages.append(frame_log)
