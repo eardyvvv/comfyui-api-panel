@@ -62,7 +62,7 @@ class NSFW_Image_Checker:
         return {
             "required": {
                 "image": ("IMAGE",),
-                "threshold": ("FLOAT", {"default": 0.8, "min": 0.0, "max": 1.0, "step": 0.01}),
+                "threshold": ("FLOAT", {"default": 0.95, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "sexy_threshold": ("FLOAT", {"default": 0.98, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "source_name": ("STRING", {"default": "Media_Input"}),
             }
@@ -80,9 +80,10 @@ class NSFW_Image_Checker:
             _classifier = pipeline("image-classification", model="Freepik/nsfw_image_detector", device=0)
             
         total_frames = image.shape[0]
+        num_checked = min(50, total_frames)
         if total_frames > 1:
-            step = (total_frames - 1) / 9
-            frames_to_check = [int(step * i) for i in range(9)] + [total_frames - 1]
+            step = (total_frames - 1) / (num_checked - 1)
+            frames_to_check = [int(step * i) for i in range(num_checked - 1)] + [total_frames - 1]
             frames_to_check = sorted(list(set(frames_to_check)))
         else:
             frames_to_check = [0]
@@ -98,33 +99,55 @@ class NSFW_Image_Checker:
         if not isinstance(results_batch[0], list):
             results_batch = [results_batch]
             
-        log_messages = []
+        porn_scores = []
         bad_frames = 0
-        limit = 5 if total_frames > 1 else 1
+        consecutive_sniper = 0
+        max_consecutive_sniper = 0
+        
+        num_checked = len(frames_to_check)
+        limit = max(1, int(num_checked * 0.5))
         
         for frame_idx, results in zip(frames_to_check, results_batch):
             s = {str(r['label']).lower(): r['score'] for r in results}
             
-            safe_val = s.get('neutral', s.get('safe', s.get('sfw', s.get('normal', 0))))
-            mild_sexy_val = s.get('low', s.get('drawings', 0))
             sexy_val = s.get('medium', s.get('sexy', s.get('questionable', 0)))
             porn_val = s.get('high', s.get('porn', s.get('nsfw', s.get('unsafe', s.get('hentai', 0)))))
             
-            frame_log = f"F{frame_idx}: safe:{safe_val:.2f}, mild_sexy:{mild_sexy_val:.2f}, sexy:{sexy_val:.2f}, porn:{porn_val:.2f}"
-            log_messages.append(frame_log)
+            porn_scores.append(porn_val)
             
-            is_bad = False
-            if porn_val > threshold:
-                is_bad = True
-            if sexy_val > sexy_threshold:
-                is_bad = True
-                
-            if is_bad:
+            if porn_val > threshold or sexy_val > sexy_threshold:
                 bad_frames += 1
-                if bad_frames >= limit:
-                    raise ValueError(f"Blocked at [{source_name}]: 18+ limit reached ({bad_frames} frames). Last trigger: {frame_log}")
+                
+            if porn_val > 0.98:
+                consecutive_sniper += 1
+                if consecutive_sniper > max_consecutive_sniper:
+                    max_consecutive_sniper = consecutive_sniper
+            else:
+                consecutive_sniper = 0
 
-        final_log = "\n".join(log_messages)
+        avg_porn = sum(porn_scores) / len(porn_scores) if porn_scores else 0
+        max_porn = max(porn_scores) if porn_scores else 0
+        
+        is_blocked = False
+        block_reason = "None"
+        
+        if max_consecutive_sniper >= 10:
+            is_blocked = True
+            block_reason = f"Sniper Trigger ({max_consecutive_sniper} consecutive frames > 0.98)"
+        elif bad_frames >= limit:
+            is_blocked = True
+            block_reason = f"Threshold Trigger ({bad_frames}/{num_checked} frames > {threshold})"
+        
+        status = "BLOCKED" if is_blocked else "PASSED"
+        final_log = f"[{status}] Source: {source_name} | Frames: {num_checked}\n"
+        final_log += f"Avg p-score: {avg_porn:.2f} | Max p-score: {max_porn:.2f}\n"
+        final_log += f"Bad frames: {bad_frames}/{limit} limit\n"
+        final_log += f"Consecutive >0.98: {max_consecutive_sniper}/10 limit\n"
+        
+        if is_blocked:
+            final_log += f"Reason: {block_reason}"
+            raise ValueError(final_log)
+
         return (image, final_log)
 
 NODE_CLASS_MAPPINGS = {
