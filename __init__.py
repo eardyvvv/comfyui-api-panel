@@ -100,7 +100,8 @@ class NSFW_Image_Checker:
             
         porn_scores = []
         bad_frames = 0
-        s_frames = 0
+        m_frames = 0
+        l_frames = 0
         consecutive_sniper = 0
         max_consecutive_sniper = 0
         
@@ -110,13 +111,16 @@ class NSFW_Image_Checker:
         for frame_idx, results in zip(frames_to_check, results_batch):
             s = {str(r['label']).lower(): r['score'] for r in results}
             
+            mild_sexy_val = s.get('low', s.get('drawings', 0))
             sexy_val = s.get('medium', s.get('sexy', s.get('questionable', 0)))
             porn_val = s.get('high', s.get('porn', s.get('nsfw', s.get('unsafe', s.get('hentai', 0)))))
             
             porn_scores.append(porn_val)
             
+            if mild_sexy_val > 0.95:
+                l_frames += 1
             if sexy_val > 0.95:
-                s_frames += 1
+                m_frames += 1
                 
             if porn_val > threshold:
                 bad_frames += 1
@@ -132,17 +136,13 @@ class NSFW_Image_Checker:
         max_porn = max(porn_scores) if porn_scores else 0
         
         is_blocked = False
-        block_reason = ""
         
         if avg_porn > 0.50:
             is_blocked = True
-            block_reason = "Trigger 1 (Avg > 0.50)"
         elif bad_frames >= limit:
             is_blocked = True
-            block_reason = f"Trigger 2 (Density > {threshold})"
         elif max_consecutive_sniper >= 5:
             is_blocked = True
-            block_reason = "Trigger 3 (Sniper > 0.98)"
         
         status = "BLOCKED" if is_blocked else "PASSED"
         
@@ -152,13 +152,12 @@ class NSFW_Image_Checker:
         
         final_log = f"[{status}] Source: {source_name} | Frames: {num_checked}\n"
         final_log += f"P-score avg: {avg_porn:.2f} | P-score max: {max_porn:.2f}\n"
-        final_log += f"S-frames (>0.95): {s_frames}/{num_checked}\n\n"
+        final_log += f"M-frames (>0.95): {m_frames}/{num_checked} | L-frames (>0.95): {l_frames}/{num_checked}\n"
         final_log += f"Trigger 1 (Avg > 0.50): {avg_porn:.2f}{t1_status}\n"
         final_log += f"Trigger 2 (Density > {threshold}): {bad_frames}/{limit}{t2_status}\n"
-        final_log += f"Trigger 3 (Sniper > 0.98): {max_consecutive_sniper}/5{t3_status}\n"
+        final_log += f"Trigger 3 (Sniper > 0.98): {max_consecutive_sniper}/5{t3_status}"
         
         if is_blocked:
-            final_log += f"Reason: {block_reason}"
             raise ValueError(final_log)
 
         return (image, final_log)
