@@ -102,6 +102,7 @@ class NSFW_Image_Checker:
         bad_frames = 0
         m_frames = 0
         l_frames = 0
+        n_frames = 0
         consecutive_sniper = 0
         max_consecutive_sniper = 0
         
@@ -111,12 +112,15 @@ class NSFW_Image_Checker:
         for frame_idx, results in zip(frames_to_check, results_batch):
             s = {str(r['label']).lower(): r['score'] for r in results}
             
+            safe_val = s.get('neutral', s.get('safe', s.get('sfw', s.get('normal', 0))))
             mild_sexy_val = s.get('low', s.get('drawings', 0))
             sexy_val = s.get('medium', s.get('sexy', s.get('questionable', 0)))
             porn_val = s.get('high', s.get('porn', s.get('nsfw', s.get('unsafe', s.get('hentai', 0)))))
             
             porn_scores.append(porn_val)
             
+            if safe_val > 0.95:
+                n_frames += 1
             if mild_sexy_val > 0.95:
                 l_frames += 1
             if sexy_val > 0.95:
@@ -150,9 +154,9 @@ class NSFW_Image_Checker:
         t2_status = " [TRIGGERED]" if bad_frames >= limit else ""
         t3_status = " [TRIGGERED]" if max_consecutive_sniper >= 5 else ""
         
-        final_log = f"[{status}] Source: {source_name} | Frames: {num_checked}\n"
-        final_log += f"P-score avg: {avg_porn:.2f} | P-score max: {max_porn:.2f}\n"
-        final_log += f"M-frames (>0.95): {m_frames}/{num_checked} | L-frames (>0.95): {l_frames}/{num_checked}\n"
+        final_log = f"[{status}] Source: {source_name}, Frames: {num_checked}\n"
+        final_log += f"P-score avg: {avg_porn:.2f}, P-score max: {max_porn:.2f}\n"
+        final_log += f"M-frames: {m_frames}/{num_checked}, L-frames: {l_frames}/{num_checked}, N-frames: {n_frames}/{num_checked}\n"
         final_log += f"Trigger 1 (Avg > 0.50): {avg_porn:.2f}{t1_status}\n"
         final_log += f"Trigger 2 (Density > {threshold}): {bad_frames}/{limit}{t2_status}\n"
         final_log += f"Trigger 3 (Sniper > 0.98): {max_consecutive_sniper}/5{t3_status}"
