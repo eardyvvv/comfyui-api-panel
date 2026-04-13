@@ -2,6 +2,8 @@ import os
 import requests
 import uuid
 import folder_paths
+import time
+import glob
 from urllib3.util.retry import Retry
 from requests.adapters import HTTPAdapter
 import torch
@@ -235,7 +237,19 @@ class API_Video_Downloader:
                             print(f"[Video Downloader] Downloaded: {downloaded_size / (1024*1024):.1f}MB...")
 
         print(f"[Video Downloader] Success! Video fully saved to {filepath}")
-        return (filename,)
+
+        # Auto-Cleanup: Delete downloaded videos older than 1 hour
+        try:
+            current_time = time.time()
+            search_pattern = os.path.join(folder_paths.get_input_directory(), "dl_*.mp4")
+            for old_file in glob.glob(search_pattern):
+                if current_time - os.path.getmtime(old_file) > 3600:
+                    os.remove(old_file)
+                    print(f"[Video Downloader] Auto-cleaned old file: {os.path.basename(old_file)}")
+        except Exception as e:
+            print(f"[Video Downloader] Cleanup warning: {e}")
+
+        return (f"input/{filename}",)
 
 NODE_CLASS_MAPPINGS = {
     "API_Input_Panel": API_Input_Panel,
