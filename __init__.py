@@ -193,6 +193,7 @@ class API_Video_Downloader:
     def download_video(self, url):
         # If it's already a local file, just pass it through
         if not url.startswith("http"):
+            print(f"[Video Downloader] Local file detected, skipping network request: {url}")
             return (url,)
 
         # Create a unique filename in the ComfyUI input directory
@@ -206,13 +207,34 @@ class API_Video_Downloader:
         session.mount('http://', adapter)
         session.mount('https://', adapter)
 
-        # Download the file in chunks
+        print(f"[Video Downloader] Starting download from Linode...")
+        print(f"[Video Downloader] Target file: {filename}")
+
+        # Download the file in chunks with logging
         with session.get(url, stream=True) as r:
             r.raise_for_status()
+            
+            # Extract file size for percentage calculation
+            total_size = int(r.headers.get('content-length', 0))
+            downloaded_size = 0
+            last_printed_mb = 0
+            
             with open(filepath, 'wb') as f:
                 for chunk in r.iter_content(chunk_size=8192):
                     f.write(chunk)
+                    downloaded_size += len(chunk)
+                    
+                    # Log progress every 5MB to avoid spamming the console
+                    current_mb = downloaded_size // (1024 * 1024 * 5)
+                    if current_mb > last_printed_mb:
+                        last_printed_mb = current_mb
+                        if total_size > 0:
+                            percent = (downloaded_size / total_size) * 100
+                            print(f"[Video Downloader] Progress: {downloaded_size / (1024*1024):.1f}MB / {total_size / (1024*1024):.1f}MB ({percent:.1f}%)")
+                        else:
+                            print(f"[Video Downloader] Downloaded: {downloaded_size / (1024*1024):.1f}MB...")
 
+        print(f"[Video Downloader] Success! Video fully saved to {filepath}")
         return (filename,)
 
 NODE_CLASS_MAPPINGS = {
