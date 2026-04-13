@@ -1,3 +1,9 @@
+import os
+import requests
+import uuid
+import folder_paths
+from urllib3.util.retry import Retry
+from requests.adapters import HTTPAdapter
 import torch
 import numpy as np
 from PIL import Image
@@ -170,14 +176,55 @@ class NSFW_Image_Checker:
 
         return (image, final_log)
 
+class API_Video_Downloader:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "url": ("STRING", {"forceInput": True})
+            }
+        }
+
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("local_video",)
+    FUNCTION = "download_video"
+    CATEGORY = "API"
+
+    def download_video(self, url):
+        # If it's already a local file, just pass it through
+        if not url.startswith("http"):
+            return (url,)
+
+        # Create a unique filename in the ComfyUI input directory
+        filename = f"dl_{uuid.uuid4().hex[:8]}.mp4"
+        filepath = os.path.join(folder_paths.get_input_directory(), filename)
+
+        # Configure robust retries
+        session = requests.Session()
+        retry = Retry(connect=3, backoff_factor=0.5, status_forcelist=[500, 502, 503, 504])
+        adapter = HTTPAdapter(max_retries=retry)
+        session.mount('http://', adapter)
+        session.mount('https://', adapter)
+
+        # Download the file in chunks
+        with session.get(url, stream=True) as r:
+            r.raise_for_status()
+            with open(filepath, 'wb') as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    f.write(chunk)
+
+        return (filename,)
+
 NODE_CLASS_MAPPINGS = {
     "API_Input_Panel": API_Input_Panel,
     "API_BBox_Switch": API_BBox_Switch,
-    "NSFW_Image_Checker": NSFW_Image_Checker
+    "NSFW_Image_Checker": NSFW_Image_Checker,
+    "API_Video_Downloader": API_Video_Downloader
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "API_Input_Panel": "Input Panel",
     "API_BBox_Switch": "BBoxes Switch",
-    "NSFW_Image_Checker": "NSFW Image Checker"
+    "NSFW_Image_Checker": "NSFW Image Checker",
+    "API_Video_Downloader": "Video Downloader"
 }
