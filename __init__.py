@@ -4,6 +4,8 @@ import uuid
 import folder_paths
 import time
 import glob
+import subprocess
+import json
 from urllib3.util.retry import Retry
 from requests.adapters import HTTPAdapter
 import torch
@@ -251,16 +253,217 @@ class API_Video_Downloader:
 
         return (f"input/{filename}",)
 
+class API_Frames_Calculator:
+    """
+    Computes a safe `total_frames` value for WanVideo Animate workflows.
+    
+    Reads the source video's actual duration, then returns the largest valid
+    Wan VAE length (4n+1) that does NOT exceed:
+      1. The user's requested frame count
+      2. What the video can physically supply at the target fps
+    
+    Logs every step for debugging.
+    """
+
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "video_path": ("STRING", {"default": "", "multiline": False}),
+                "requested_frames": ("INT", {"default": 241, "min": 1, "max": 10000, "step": 1}),
+                "target_fps": ("FLOAT", {"default": 16.0, "min": 1.0, "max": 120.0, "step": 1.0}),
+            }
+        }
+
+    RETURN_TYPES = ("INT", "STRING")
+    RETURN_NAMES = ("total_frames", "info")
+    FUNCTION = "calculate"
+    CATEGORY = "API"
+
+    def _resolve_path(self, video_path):
+        # Absolute or relative-to-CWD that already exists
+        if os.path.isfile(video_path):
+            return video_path
+        # Relative to ComfyUI base path
+        try:
+            base_path = folder_paths.base_path
+            candidate = os.path.join(base_path, video_path)
+            if os.path.isfile(candidate):
+                return candidate
+        except AttributeError:
+            pass
+        # "input/..." prefix → input directory
+        if video_path.startswith("input/"):
+            candidate = os.path.join(
+                folder_paths.get_input_directory(),
+                video_path[len("input/"):],
+            )
+            if os.path.isfile(candidate):
+                return candidate
+        # Just basename in input dir
+        candidate = os.path.join(
+            folder_paths.get_input_directory(),
+            os.path.basename(video_path),
+        )
+        if os.path.isfile(candidate):
+            return candidate
+        return None
+
+    def _probe_ffprobe(self, path):
+        try:
+            cmd = [
+                "ffprobe", "-v", "error",
+                "-select_streams", "v:0",
+                "-show_entries", "stream=avg_frame_rate,nb_frames,duration:format=duration",
+                "-of", "json",
+                path,
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+            if result.returncode != 0:
+                print(f"[Frames Calculator] ffprobe rc={result.returncode}: {result.stderr.strip()}")
+                return None, None, None
+            data = json.loads(result.stdout)
+
+            duration = None
+            source_fps = None
+            nb_frames = None
+
+            streams = data.get("streams", [])
+            if streams:
+                st = streams[0]
+                d = st.get("duration")
+                if d:
+                    try: duration = float(d)
+                    except (TypeError, ValueError): pass
+                fr = st.get("avg_frame_rate")
+                if fr and "/" in fr:
+                    try:
+                        num, den = fr.split("/")
+                        n, dn = float(num), float(den)
+                        if dn > 0: source_fps = n / dn
+                    except (ValueError, ZeroDivisionError): pass
+                nb = st.get("nb_frames")
+                if nb:
+                    try: nb_frames = int(nb)
+                    except (TypeError, ValueError): pass
+
+            if duration is None:
+                d = data.get("format", {}).get("duration")
+                if d:
+                    try: duration = float(d)
+                    except (TypeError, ValueError): pass
+
+            return duration, source_fps, nb_frames
+        except FileNotFoundError:
+            print("[Frames Calculator] ffprobe not found in PATH")
+            return None, None, None
+        except Exception as e:
+            print(f"[Frames Calculator] ffprobe error: {type(e).__name__}: {e}")
+            return None, None, None
+
+    def _probe_cv2(self, path):
+        try:
+            import cv2
+            cap = cv2.VideoCapture(path)
+            if not cap.isOpened():
+                print(f"[Frames Calculator] cv2 cannot open {path}")
+                return None, None, None
+            source_fps = cap.get(cv2.CAP_PROP_FPS)
+            source_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            cap.release()
+            if source_fps <= 0 or source_count <= 0:
+                return None, None, None
+            duration = source_count / source_fps
+            return duration, source_fps, source_count
+        except Exception as e:
+            print(f"[Frames Calculator] cv2 error: {type(e).__name__}: {e}")
+            return None, None, None
+
+    def calculate(self, video_path, requested_frames, target_fps):
+        log_lines = []
+        def log(msg):
+            print(f"[Frames Calculator] {msg}")
+            log_lines.append(msg)
+
+        log("=" * 50)
+        log("Starting calculation")
+        log(f"Inputs: video_path='{video_path}', requested_frames={requested_frames}, target_fps={target_fps}")
+
+        if requested_frames < 1:
+            err = f"ERROR: requested_frames must be >= 1 (got {requested_frames})"
+            log(err); raise ValueError(err)
+        if target_fps <= 0:
+            err = f"ERROR: target_fps must be > 0 (got {target_fps})"
+            log(err); raise ValueError(err)
+
+        actual_path = self._resolve_path(video_path)
+        if actual_path is None:
+            err = f"ERROR: Could not resolve video path '{video_path}'"
+            log(err); raise FileNotFoundError(err)
+        log(f"Resolved path: {actual_path}")
+
+        duration, source_fps, source_count = self._probe_ffprobe(actual_path)
+        probe_source = "ffprobe"
+        if duration is None:
+            log("ffprobe unavailable/failed; falling back to cv2")
+            duration, source_fps, source_count = self._probe_cv2(actual_path)
+            probe_source = "cv2"
+
+        if duration is None or duration <= 0:
+            err = "ERROR: Could not determine video duration via ffprobe or cv2"
+            log(err); raise RuntimeError(err)
+
+        log(f"Probe via {probe_source}: duration={duration:.3f}s, "
+            f"source_fps={source_fps if source_fps is None else f'{source_fps:.3f}'}, "
+            f"source_frames={source_count}")
+
+        # How many frames at TARGET fps the video can supply (floor — partial frames don't count)
+        source_frames_at_target = int(duration * target_fps)
+        log(f"At target_fps={target_fps}, video supplies {source_frames_at_target} frames "
+            f"(= floor({duration:.3f} × {target_fps}))")
+
+        target = min(requested_frames, source_frames_at_target)
+        log(f"target = min(requested={requested_frames}, available={source_frames_at_target}) = {target}")
+
+        if target < 5:
+            err = (f"ERROR: target frames = {target}, below Wan VAE minimum (5). "
+                   f"Source video too short for any usable generation.")
+            log(err); raise ValueError(err)
+
+        # Round DOWN to nearest 4n+1 (Wan VAE valid length)
+        n = (target - 1) // 4
+        corrected = 4 * n + 1
+        result_duration = corrected / target_fps
+
+        log(f"Round-down to 4n+1: n=(target-1)//4={n}, corrected=4n+1={corrected}")
+        log(f"Result duration: {corrected}/{target_fps} = {result_duration:.3f}s")
+
+        if corrected == requested_frames:
+            log(f"OK: full requested length achievable ({corrected} frames, {result_duration:.3f}s)")
+        else:
+            reasons = []
+            if source_frames_at_target < requested_frames:
+                reasons.append(f"video supplies only {source_frames_at_target} frames at target fps")
+            if (requested_frames - 1) % 4 != 0:
+                reasons.append("requested length is not 4n+1")
+            log(f"NOTE: reduced from {requested_frames} → {corrected} frames "
+                f"({result_duration:.3f}s). Reason: {'; '.join(reasons) or 'rounded down to 4n+1'}")
+
+        log("=" * 50)
+        return (corrected, "\n".join(log_lines))
+
 NODE_CLASS_MAPPINGS = {
     "API_Input_Panel": API_Input_Panel,
     "API_BBox_Switch": API_BBox_Switch,
     "NSFW_Image_Checker": NSFW_Image_Checker,
-    "API_Video_Downloader": API_Video_Downloader
+    "API_Video_Downloader": API_Video_Downloader,
+    "API_Frames_Calculator": API_Frames_Calculator,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "API_Input_Panel": "Input Panel",
     "API_BBox_Switch": "BBoxes Switch",
     "NSFW_Image_Checker": "NSFW Image Checker",
-    "API_Video_Downloader": "Video Downloader"
+    "API_Video_Downloader": "Video Downloader",
+    "API_Frames_Calculator": "Frames Calculator",
 }
