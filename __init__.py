@@ -467,6 +467,10 @@ class API_Group_Muter:
     FUNCTION = "get_values"
     CATEGORY = "API"
 
+    @classmethod
+    def VALIDATE_INPUTS(s, group=None, mute=None):
+        return True
+
     def get_values(self, group, mute):
         return (group, mute)
 

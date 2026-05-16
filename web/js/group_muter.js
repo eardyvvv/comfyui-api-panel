@@ -7,7 +7,40 @@ const MODE_NEVER = 2;
 const STATE_KEY = "__api_group_muter_state";
 
 function getGraph() {
-    return app.canvas?.graph || app.graph;
+    return app.canvas?.getCurrentGraph?.() || app.canvas?.graph || app.graph;
+}
+
+function getRootGraph() {
+    const graph = getGraph();
+    return app.rootGraph || graph?.rootGraph || app.graph?.rootGraph || app.graph || graph;
+}
+
+function getGraphs(graph = getGraph()) {
+    const seen = new Set();
+    const graphs = [];
+    const rootGraph = getRootGraph();
+
+    for (const candidate of [graph, rootGraph]) {
+        if (candidate && !seen.has(candidate)) {
+            seen.add(candidate);
+            graphs.push(candidate);
+        }
+    }
+
+    for (const candidateGraph of [...graphs]) {
+        const subgraphs = candidateGraph?.subgraphs?.values?.();
+        if (!subgraphs) {
+            continue;
+        }
+        for (const subgraph of subgraphs) {
+            if (subgraph && !seen.has(subgraph)) {
+                seen.add(subgraph);
+                graphs.push(subgraph);
+            }
+        }
+    }
+
+    return graphs;
 }
 
 function asArray(value) {
@@ -30,26 +63,68 @@ function asArray(value) {
 }
 
 function getGroups(graph = getGraph()) {
-    const liveGroups = asArray(graph?._groups ?? graph?.groups);
-    if (liveGroups.length) {
-        return liveGroups;
+    const seen = new Set();
+    const groups = [];
+
+    for (const candidateGraph of getGraphs(graph)) {
+        for (const group of asArray(candidateGraph?._groups ?? candidateGraph?.groups)) {
+            if (!seen.has(group)) {
+                seen.add(group);
+                groups.push(group);
+            }
+        }
     }
 
-    return asArray(graph?.serialize?.()?.groups);
+    if (!groups.length) {
+        groups.push(...asArray(graph?.serialize?.()?.groups));
+    }
+
+    return groups;
 }
 
 function getNodes(graph = getGraph()) {
     return asArray(graph?._nodes ?? graph?.nodes);
 }
 
+function getAllNodes(graph = getGraph()) {
+    const seen = new Set();
+    const nodes = [];
+
+    for (const candidateGraph of getGraphs(graph)) {
+        for (const node of getNodes(candidateGraph)) {
+            if (!seen.has(node)) {
+                seen.add(node);
+                nodes.push(node);
+            }
+        }
+    }
+
+    return nodes;
+}
+
 function getNodeById(graph, id) {
-    return (
+    const found = (
         graph?.getNodeById?.(id) ||
         graph?.getNodeById?.(Number(id)) ||
         graph?._nodes_by_id?.[id] ||
         graph?._nodes_by_id?.get?.(id) ||
         graph?._nodes_by_id?.get?.(Number(id))
     );
+    if (found) {
+        return found;
+    }
+
+    for (const candidateGraph of getGraphs(graph)) {
+        const node =
+            candidateGraph?.getNodeById?.(id) ||
+            candidateGraph?.getNodeById?.(Number(id)) ||
+            candidateGraph?._nodes_by_id?.[id] ||
+            candidateGraph?._nodes_by_id?.get?.(id) ||
+            candidateGraph?._nodes_by_id?.get?.(Number(id));
+        if (node) {
+            return node;
+        }
+    }
 }
 
 function getGroupTitle(group, index) {
@@ -81,16 +156,21 @@ function getWidget(node, name) {
     return node.widgets?.find((widget) => widget.name === name);
 }
 
+function getGroupValues(graph = getGraph()) {
+    const entries = getGroupEntries(graph);
+    return entries.length ? entries.map((entry) => entry.value) : [EMPTY_GROUP_VALUE];
+}
+
 function updateComboWidget(node) {
     const groupWidget = getWidget(node, "group");
     if (!groupWidget) {
         return;
     }
 
-    const entries = getGroupEntries(node.graph || getGraph());
-    const values = entries.length ? entries.map((entry) => entry.value) : [EMPTY_GROUP_VALUE];
+    const graph = node.graph || getGraph();
+    const values = getGroupValues(graph);
     groupWidget.options ??= {};
-    groupWidget.options.values = values;
+    groupWidget.options.values = () => getGroupValues(node.graph || getGraph());
 
     if (!values.includes(groupWidget.value)) {
         groupWidget.value = values[0];
@@ -129,12 +209,75 @@ function rectsOverlap(a, b) {
     );
 }
 
+function rectContainsPoint(rect, point) {
+    if (!rect || !point || rect.some(Number.isNaN) || point.some(Number.isNaN)) {
+        return false;
+    }
+
+    return (
+        point[0] >= rect[0] &&
+        point[0] < rect[0] + rect[2] &&
+        point[1] >= rect[1] &&
+        point[1] < rect[1] + rect[3]
+    );
+}
+
 function findGroup(value, graph = getGraph()) {
     return getGroupEntries(graph).find((entry) => entry.value === value)?.group || null;
 }
 
+function getNodeBounding(node) {
+    let bounds = node?.getBounding?.();
+    if (
+        bounds &&
+        bounds[0] === 0 &&
+        bounds[1] === 0 &&
+        bounds[2] === 0 &&
+        bounds[3] === 0
+    ) {
+        const ctx = node.graph?.primaryCanvas?.canvas?.getContext?.("2d") || app.canvas?.canvas?.getContext?.("2d");
+        if (ctx) {
+            node.updateArea?.(ctx);
+            bounds = node.getBounding?.();
+        }
+    }
+
+    return getRect({ boundingRect: bounds }) || getRect(node);
+}
+
+function recomputeGroupNodes(group, graph = getGraph()) {
+    const groupGraph = group?.graph || graph;
+    const groupRect = getRect(group);
+    if (!groupRect || !groupGraph) {
+        return;
+    }
+
+    group._children?.clear?.();
+    if (Array.isArray(group.nodes)) {
+        group.nodes.length = 0;
+    }
+
+    for (const node of getNodes(groupGraph)) {
+        const nodeRect = getNodeBounding(node);
+        const center = nodeRect && [nodeRect[0] + nodeRect[2] * 0.5, nodeRect[1] + nodeRect[3] * 0.5];
+        if (center && rectContainsPoint(groupRect, center)) {
+            group._children?.add?.(node);
+            if (Array.isArray(group.nodes)) {
+                group.nodes.push(node);
+            }
+        }
+    }
+}
+
 function getGroupNodes(group, controllerNode, graph = getGraph()) {
-    const allNodes = getNodes(graph);
+    recomputeGroupNodes(group, graph);
+
+    const children = asArray(group?._children);
+    if (children.length) {
+        return children.filter((node) => node && node.id !== controllerNode.id);
+    }
+
+    const allNodes = getNodes(group?.graph || graph);
     const explicitNodes = group?.nodes || group?._nodes;
 
     if (Array.isArray(explicitNodes) && explicitNodes.length) {
@@ -263,7 +406,7 @@ function installRemovalHandler(node) {
 }
 
 function refreshAllControllers() {
-    for (const node of getNodes()) {
+    for (const node of getAllNodes()) {
         if (node?.comfyClass === NODE_CLASS || node?.type === NODE_CLASS) {
             installWidgetCallbacks(node);
             installRemovalHandler(node);
@@ -287,6 +430,16 @@ app.registerExtension({
 
     async afterConfigureGraph() {
         refreshAllControllers();
+    },
+
+    async loadedGraphNode(node) {
+        if (node?.comfyClass !== NODE_CLASS && node?.type !== NODE_CLASS) {
+            return;
+        }
+
+        installWidgetCallbacks(node);
+        installRemovalHandler(node);
+        scheduleApply(node);
     },
 
     async setup() {
