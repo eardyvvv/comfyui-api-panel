@@ -452,12 +452,31 @@ class API_Frames_Calculator:
         log("=" * 50)
         return (corrected, "\n".join(log_lines))
 
+class API_Group_Muter:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "group": (["No groups found"],),
+                "mute": ("BOOLEAN", {"default": False}),
+            }
+        }
+
+    RETURN_TYPES = ("STRING", "BOOLEAN")
+    RETURN_NAMES = ("group", "mute")
+    FUNCTION = "get_values"
+    CATEGORY = "API"
+
+    def get_values(self, group, mute):
+        return (group, mute)
+
 NODE_CLASS_MAPPINGS = {
     "API_Input_Panel": API_Input_Panel,
     "API_BBox_Switch": API_BBox_Switch,
     "NSFW_Image_Checker": NSFW_Image_Checker,
     "API_Video_Downloader": API_Video_Downloader,
     "API_Frames_Calculator": API_Frames_Calculator,
+    "API_Group_Muter": API_Group_Muter,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -466,4 +485,13 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "NSFW_Image_Checker": "NSFW Image Checker",
     "API_Video_Downloader": "Video Downloader",
     "API_Frames_Calculator": "Frames Calculator",
+    "API_Group_Muter": "Group Muter",
 }
+
+WEB_DIRECTORY = "./web/js"
+
+__all__ = [
+    "NODE_CLASS_MAPPINGS",
+    "NODE_DISPLAY_NAME_MAPPINGS",
+    "WEB_DIRECTORY",
+]
