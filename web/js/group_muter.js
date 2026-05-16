@@ -7,7 +7,7 @@ const MODE_NEVER = 2;
 const STATE_KEY = "__api_group_muter_state";
 
 function getGraph() {
-    return app.graph || app.canvas?.graph;
+    return app.canvas?.graph || app.graph;
 }
 
 function asArray(value) {
@@ -20,11 +20,22 @@ function asArray(value) {
     if (typeof value.values === "function") {
         return Array.from(value.values());
     }
+    if (typeof value.length === "number") {
+        return Array.from(value);
+    }
+    if (typeof value === "object") {
+        return Object.values(value);
+    }
     return [];
 }
 
 function getGroups(graph = getGraph()) {
-    return asArray(graph?._groups ?? graph?.groups);
+    const liveGroups = asArray(graph?._groups ?? graph?.groups);
+    if (liveGroups.length) {
+        return liveGroups;
+    }
+
+    return asArray(graph?.serialize?.()?.groups);
 }
 
 function getNodes(graph = getGraph()) {
@@ -76,7 +87,7 @@ function updateComboWidget(node) {
         return;
     }
 
-    const entries = getGroupEntries();
+    const entries = getGroupEntries(node.graph || getGraph());
     const values = entries.length ? entries.map((entry) => entry.value) : [EMPTY_GROUP_VALUE];
     groupWidget.options ??= {};
     groupWidget.options.values = values;
@@ -91,7 +102,7 @@ function getRect(item) {
         return null;
     }
 
-    const bounds = item.boundingRect;
+    const bounds = item.boundingRect || item.bounding || item._bounding || item.rect;
     if (bounds?.length >= 4) {
         return [Number(bounds[0]), Number(bounds[1]), Number(bounds[2]), Number(bounds[3])];
     }
@@ -118,12 +129,11 @@ function rectsOverlap(a, b) {
     );
 }
 
-function findGroup(value) {
-    return getGroupEntries().find((entry) => entry.value === value)?.group || null;
+function findGroup(value, graph = getGraph()) {
+    return getGroupEntries(graph).find((entry) => entry.value === value)?.group || null;
 }
 
-function getGroupNodes(group, controllerNode) {
-    const graph = getGraph();
+function getGroupNodes(group, controllerNode, graph = getGraph()) {
     const allNodes = getNodes(graph);
     const explicitNodes = group?.nodes || group?._nodes;
 
@@ -161,7 +171,7 @@ function getState(node) {
 }
 
 function restoreTrackedNodes(node, keepIds = new Set()) {
-    const graph = getGraph();
+    const graph = node.graph || getGraph();
     const state = getState(node);
 
     for (const [nodeId, mode] of Object.entries(state.modes)) {
@@ -185,7 +195,8 @@ function applyGroupMute(node) {
     const state = getState(node);
     const selectedGroup = groupWidget?.value;
     const enabled = Boolean(muteWidget?.value);
-    const group = enabled && selectedGroup !== EMPTY_GROUP_VALUE ? findGroup(selectedGroup) : null;
+    const graph = node.graph || getGraph();
+    const group = enabled && selectedGroup !== EMPTY_GROUP_VALUE ? findGroup(selectedGroup, graph) : null;
 
     if (!group) {
         restoreTrackedNodes(node);
@@ -194,7 +205,7 @@ function applyGroupMute(node) {
         return;
     }
 
-    const groupNodes = getGroupNodes(group, node);
+    const groupNodes = getGroupNodes(group, node, graph);
     const activeIds = new Set(groupNodes.map((targetNode) => String(targetNode.id)));
 
     restoreTrackedNodes(node, activeIds);
