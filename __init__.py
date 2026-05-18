@@ -30,16 +30,17 @@ class API_Input_Panel:
                 "face_only": ("BOOLEAN", {"default": False}),
                 "width": ("INT", {"default": 480, "min": 1, "max": 8192, "step": 1}),
                 "height": ("INT", {"default": 856, "min": 1, "max": 8192, "step": 1}),
+                "motion_control": ("BOOLEAN", {"default": False}),
             },
         }
 
-    RETURN_TYPES = ("STRING", "STRING", "INT", "INT", "INT", "FLOAT", "STRING", "STRING", "INT", "BOOLEAN", "INT", "INT")
-    RETURN_NAMES = ("img_url", "video_url", "total_frames", "skip_first_frames", "mask_width", "frame_rate", "positive_prompt", "negative_prompt", "seed", "face_only", "width", "height")
+    RETURN_TYPES = ("STRING", "STRING", "INT", "INT", "INT", "FLOAT", "STRING", "STRING", "INT", "BOOLEAN", "INT", "INT", "BOOLEAN")
+    RETURN_NAMES = ("img_url", "video_url", "total_frames", "skip_first_frames", "mask_width", "frame_rate", "positive_prompt", "negative_prompt", "seed", "face_only", "width", "height", "motion_control")
     FUNCTION = "get_values"
     CATEGORY = "API"
 
-    def get_values(self, img_url, video_url, total_frames, skip_first_frames, mask_width, frame_rate, positive_prompt, negative_prompt, seed, face_only, width, height):
-        return (img_url, video_url, total_frames, skip_first_frames, mask_width, frame_rate, positive_prompt, negative_prompt, seed, face_only, width, height)
+    def get_values(self, img_url, video_url, total_frames, skip_first_frames, mask_width, frame_rate, positive_prompt, negative_prompt, seed, face_only, width, height, motion_control):
+        return (img_url, video_url, total_frames, skip_first_frames, mask_width, frame_rate, positive_prompt, negative_prompt, seed, face_only, width, height, motion_control)
 
 
 class API_BBox_Switch:
